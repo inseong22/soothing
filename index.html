@@ -1,0 +1,46 @@
+<!--
+  Congratulations! Your project has been converted to JavaScript!
+
+  You should see a working preview of your project on the right side of
+  the screen. If not, it means something went wrong.
+
+  Your project's code is all stored in the files on the left side of the
+  screen. You can edit the JavaScript code and your project will change.
+  But you have to save your changes using File > Save or Ctrl+S on your
+  keyboard before the project preview will update.
+-->
+
+<!DOCTYPE html>
+<html>
+  <head>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leopard@^1/dist/index.min.css"/>
+    <link rel="stylesheet" href="index.css"/>
+  </head>
+  <body>
+      <div class="flex-container">
+        <div style="color:white; font-size:50px; margin-bottom:3%; margin-top:3%; font-weight: 700; margin-right:5%;">
+            Soothing
+        </div>  
+        <button id="greenFlag" class="w-btn-outline w-btn-yellow-outline" type="button">
+            Start
+        </button>
+    </div>
+    <div id="project" style=""></div>
+
+
+    <script type="module">
+      import project from "./index.js";
+
+      project.attach("#project");
+
+      document.querySelector("#greenFlag").addEventListener("click", () => {
+        project.greenFlag();
+      });
+
+      // Autoplay
+      
+    </script>
+  </body>
+</html>
