@@ -1,0 +1,286 @@
+library(dplyr)
+library(tidyr)
+install.packages("gridExtra")
+library(gridExtra)
+
+# 데이터 불러오기 및 전처리
+read_and_process_data <- function(file_path, time) {
+  data <- read_excel(file_path)
+  colnames(data)[1] <- "...1"  # 첫 번째 열 이름 변경
+  data <- data.frame(data)
+  data$id <- as.numeric(sub("s(\\d+)_.*", "\\1", data$`...1`))
+  data$time <- time
+  data <- data[!is.na(data$con_avg), ]
+  data <- subset(data, select = -c(game_avg))  # 'game_avg' 열 제거
+  return(data)}
+# 각 날짜별 데이터 불러오기
+df1 <- read_and_process_data("C:/Users/kkhyu/OneDrive/바탕 화면/meteor_56/1일차/조건별/ai_stand, 1일차 조건별.xlsx", "1day")
+df2 <- read_and_process_data("C:/Users/kkhyu/OneDrive/바탕 화면/meteor_56/2일차/조건별/ai_stand, 2일차 조건별.xlsx", "2day")
+df3 <- read_and_process_data("C:/Users/kkhyu/OneDrive/바탕 화면/meteor_56/4일차/조건별/ai_stand, 4일차 조건별.xlsx", "4day")
+# 데이터 스택으로 합치기
+# df3에 있는 id와 일치하는 df1, df2의 행들을 선택하여 병합
+selected_df1 <- df1[df1$id %in% df3$id, c("id", "time", "con_avg", "unc_avg", "ctl_avg")]
+selected_df2 <- df2[df2$id %in% df3$id, c("id", "time", "con_avg", "unc_avg", "ctl_avg")]
+selected_df3 <- df3[df3$id %in% df3$id, c("id", "time", "con_avg", "unc_avg", "ctl_avg")]
+# 선택된 행들을 병합
+df_avg <- rbind(selected_df1, selected_df2, selected_df3)
+# ctl_avg와 unc_avg의 순서 변경
+df_avg <- melt(df_avg, id.vars = c("id", "time"), measure.vars = c("con_avg", "unc_avg", "ctl_avg"))
+df_avg <- df_avg %>%
+  rename(treatment = variable, score = value)
+df_avg$treatment <- factor(df_avg$treatment, levels = c("con_avg", "unc_avg", "ctl_avg"))
+df_avg
+###################################################################      
+summary(df_avg) #요약통계
+analyze_rm_anova(df_avg) #이원산 반복측정 분산분석결과
+tworm_bxp(df_avg, "Simil score for different treatments at different times(n=56)", -3, 3, c)
+int_all <- draw_interaction_plot(df_avg)
+diff_all <- draw_effect_plot(df_avg)
+####################################각 일차 내 비교################
+df_1 <- subset(df_avg, time == '1day')
+df_2 <- subset(df_avg, time == '2day')
+df_4 <- subset(df_avg, time == '4day')
+d <- df_4
+
+    #two-tailed 비모수
+      compare_means(score ~ treatment, data = d, method = "kruskal.test", p.adjust.method="bonferroni")
+      compare_means(score ~ treatment, data = d, method = "wilcox.test", paired = TRUE, p.adjust.method="bonferroni")
+    #one-tailed 비모수
+      compare_means(score ~ treatment, data = d, method = "wilcox.test", paired = TRUE, alternative="less", p.adjust.method="bonferroni")
+      compare_means(score ~ treatment, data = d, method = "wilcox.test", paired = TRUE, alternative="greater", p.adjust.method="bonferroni")
+      
+    #two-tailed 모수
+      compare_means(score ~ treatment, data = d, method = "anova", p.adjust.method="bonferroni")
+      compare_means(score ~ treatment, data = d, method = "t.test", paired = TRUE, p.adjust.method="bonferroni")
+    #one-tailed 모수
+      compare_means(score ~ treatment, data = d, method = "t.test", paired = TRUE, alternative="less", p.adjust.method="bonferroni")
+      compare_means(score ~ treatment, data = d, method = "t.test", paired = TRUE, alternative="greater", p.adjust.method="bonferroni")
+      
+            ## 한꺼번에 세집단, 두집단씩 비교              
+            #비모수 -> Run Kruskal-Wallis test and Wilcoxon test
+              kruskal_test_result <- compare_means(score ~ treatment, data = df_avg, group.by = "time", method = "kruskal.test", paired = TRUE)
+              wilcoxon_test_result <- compare_means(score ~ treatment, data = df_avg, group.by = "time", method = "wilcox.test", paired = TRUE)
+              kruskal_test_result
+              wilcoxon_test_result
+            #모수  
+            compare_means(score ~ treatment, data = df_avg, group.by = "time",
+                          method='anova', paired=TRUE)
+            compare_means(score ~ treatment, data = df_avg, group.by = "time", 
+                          method='t.test', paired=TRUE)  
+
+c <- c("#F8766D", "#00BFC4", "#F5F5F5") 
+c1 <- c("darkseagreen3", "darkseagreen2", "white") #긍정col
+c2 <- c("thistle","thistle1","white")   #부정col
+
+########아래는 함수목록##############
+#0.데이터 요약 함수 #
+summary <- function(df) {
+  # 요약 통계량 계산
+  summary_stats <- df %>%
+    group_by(treatment, time) %>%
+    summarize(
+      median_score = median(score, na.rm = TRUE),mean_score = mean(score, na.rm = TRUE),
+      sd_score = sd(score, na.rm = TRUE),
+      min_score = min(score, na.rm = TRUE),max_score = max(score, na.rm = TRUE),
+      q1_score = quantile(score, probs = 0.25, na.rm = TRUE), q3_score = quantile(score, probs = 0.75, na.rm = TRUE))
+  print(summary_stats)
+  # Shapiro-Wilk 정규성 검정 결과 출력
+  shapiro_results <- df %>%
+    group_by(treatment, time) %>%
+    summarise(p_value = shapiro.test(score)$p.value)
+  print(shapiro_results)
+  # outlier check
+  outliers <- df %>%
+    group_by(treatment, time) %>%
+    rstatix::identify_outliers(score)
+  print(outliers)
+  # Q-Q Plot 그리기
+  qqplot <- ggqqplot(df, "score", ggtheme = theme_bw()) +
+    facet_grid(time ~ treatment, labeller = "label_both") +
+    labs(title = "Q-Q Plot of Score by Treatment and Time",
+         x = "Theoretical Quantiles", y = "Sample Quantiles") +
+    theme_minimal()
+  # 그룹별 히스토그램 그리기
+  histograms <- ggplot(df, aes(x = score, fill = treatment)) +
+    geom_histogram(binwidth = 0.1, position = "dodge") +
+    facet_grid(time ~ treatment, scales = "free_y") +
+    labs(title = "Histograms of Score by Treatment and Time",
+         x = "Score", y = "Frequency") +
+    theme_minimal()
+  # Q-Q Plot과 히스토그램을 한 페이지에 출력
+  grid.arrange(qqplot, histograms, ncol = 2)}
+#1. 2way rm anova 분석진행
+library(rstatix)
+analyze_rm_anova <- function(data) {
+  res.aov <- anova_test(  
+    data = data, dv = score, wid = id,
+    within = c(treatment, time))
+  anova_table <- get_anova_table(res.aov)
+  print(anova_table)
+  # interaction effect이 있다면
+  # 1-1) Effect of treatment at each time point
+  one.way <- data %>% group_by(time) %>%
+    anova_test(dv = score, wid = id, within = treatment) %>%
+    get_anova_table() %>%
+    adjust_pvalue(method = "bonferroni")
+  print(one.way)
+  # 1-2) Pairwise comparisons between treatment groups
+  pwc <- data %>%
+    group_by(time) %>%
+    pairwise_t_test(
+      score ~ treatment, paired = TRUE,
+      p.adjust.method = "bonferroni")
+  print(pwc)
+  # 2-1) Effect of time at each level of treatment
+  one.way2 <- data %>%
+    group_by(treatment) %>%
+    anova_test(dv = score, wid = id, within = time) %>%
+    get_anova_table() %>%
+    adjust_pvalue(method = "bonferroni")
+  print(one.way2)
+  # 2-2) Pairwise comparisons between time points
+  pwc2 <- data %>%
+    group_by(treatment) %>%
+    pairwise_t_test(
+      score ~ time, paired = TRUE,
+      p.adjust.method = "bonferroni")
+  print(pwc2)
+  # interaction effect이 없다면
+  # 1) comparisons for treatment variable
+  print(data %>%
+          pairwise_t_test(
+            score ~ treatment, paired = TRUE, 
+            p.adjust.method = "bonferroni"))
+  
+  # 2) comparisons for time variable
+  print(data %>%
+          pairwise_t_test(
+            score ~ time, paired = TRUE, 
+            p.adjust.method = "bonferroni"))}   
+
+#2. 사후검정 반영된 bxplot 그리기
+tworm_bxp <- function(data, title, low, up, c) {
+  group_means <- data %>%
+    group_by(time, treatment) %>%
+    summarise(mean_score = mean(score)) %>%
+    arrange(time, treatment)  # 시간과 처리 순서대로 정렬
+  bxp <- ggboxplot(
+    data, x = "time", y = "score",
+    color = "treatment", palette = c,
+    add = "mean_point", mean.color = "black", mean.shape = 21, mean.size = 2,
+    fill = "treatment", legend = "top",
+    title = title, xlab = "Time", ylab = "Score",
+    ylim = c(low, up),
+    theme = theme_minimal() +
+      theme(
+        plot.title = element_text(family = "Arial", face = "bold", size = 12, hjust = 0.5),
+        axis.title = element_text(family = "Arial", size = 12),
+        legend.text = element_text(family = "Arial", size = 10),
+        legend.title = element_text(family = "Arial", size = 11),
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        panel.border = element_rect(color = "black", fill = NA))) +
+    geom_point(data = group_means, aes(x = time, y = mean_score, color = treatment), 
+               size = 2, position = position_dodge(width = 0.8), shape = 21, fill = "white", stroke = 1) +
+    scale_color_manual(values = c("conscious" = "#F8766D", "unconscious" = "#00BFC4", "control" = "#F5F5F5"))
+  # Paired t-test
+  res.aov <- anova_test(  
+    data = data, dv = score, wid = id,
+    within = c(treatment, time))
+  anova_table <- get_anova_table(res.aov)
+  pwc <- data %>%
+    group_by(time) %>%
+    pairwise_t_test(
+      score ~ treatment, paired = TRUE,
+      p.adjust.method = "bonferroni")
+  pwc <- pwc %>% add_xy_position(x = "time")
+  bxp + 
+    stat_pvalue_manual(pwc, tip.length = 0, hide.ns = TRUE) +
+    labs(
+      subtitle = get_test_label(res.aov, detailed = TRUE),
+      caption = get_pwc_label(pwc))}
+
+#interaction plot   
+draw_interaction_plot <- function(data) {
+  group_means <- data %>%
+    group_by(time, treatment) %>%
+    summarise(mean_score = mean(score)) %>%
+    arrange(time, treatment)
+  mean_plot <- ggplot(group_means, aes(x = time, y = mean_score, color = treatment, group = treatment)) +
+    geom_line() +  # 선 그래프
+    geom_point() +  # 점 그래프
+    labs(title = "Mean Scores by Time and Treatment", x = "Time", y = "Mean Score", color = "Treatment") +  # 축 및 범례 레이블 지정
+    scale_color_manual(values = c("red", "blue", "black")) +  # 선 색상 지정
+    theme_minimal()  # 테마 설정
+  group_med <- data %>%
+    group_by(time, treatment) %>%
+    summarise(median_score = median(score))
+  median_plot <- ggplot(group_med, aes(x = time, y = median_score, color = treatment, group = treatment)) +
+    geom_line() +  # 선 그래프
+    geom_point() +  # 점 그래프
+    labs(title = "Median Scores by Time and Treatment", x = "Time", y = "Median Score", color = "Treatment") +  # 축 및 범례 레이블 지정
+    scale_color_manual(values = c("red", "blue", "black")) +  # 선 색상 지정
+    theme_minimal()  # 테마 설정
+  grid.arrange(mean_plot, median_plot, ncol = 2)} # 두 그래프를 한 화면에 출력
+
+library(ggrepel)
+#3-1. 차잇값(ctl-con,ctl-unc) plot
+draw_effect_plot <- function(data) {
+  group_means <- data %>%
+    group_by(time, treatment) %>%
+    summarise(mean_score = mean(score)) %>%
+    arrange(time, treatment)
+  group_means <- group_means %>%
+    mutate(effect_of_CON = mean_score[which(treatment == "ctl_avg")] - mean_score[which(treatment == "con_avg")],
+           effect_of_UNCON = mean_score[which(treatment == "ctl_avg")] - mean_score[which(treatment == "unc_avg")])
+  mean_plot <- ggplot(group_means, aes(x = time)) +
+    geom_line(aes(y = effect_of_CON, color = "Effect of CON", group = 1)) +
+    geom_point(aes(y = effect_of_CON, color = "Effect of CON")) +
+    geom_line(aes(y = effect_of_UNCON, color = "Effect of UNCON", group = 1)) +
+    geom_point(aes(y = effect_of_UNCON, color = "Effect of UNCON")) +
+    geom_hline(yintercept = 0, linetype = "dashed", color = "black") +
+    annotate(geom = "text", x = max(as.numeric(group_means$time)) + 0.2, y = 0, label = "no effect", color = "black", hjust = 0, size = 3) +
+    annotate(geom = "text", x = max(as.numeric(group_means$time)) + 0.2, y = 0.02, label = "weakened", color = "black", hjust = 0, size = 3) +
+    annotate(geom = "text", x = max(as.numeric(group_means$time)) + 0.2, y = -0.02, label = "consolidated", color = "black", hjust = 0, size = 3) +
+    labs(title = "Effect of CON and UNCON over Time(difference in mean)",
+         x = "Time",
+         y = "Effect") +
+    scale_color_manual(values = c("Effect of CON" = "red", "Effect of UNCON" = "blue"),
+                       labels = c("Effect of CON", "Effect of UNCON")) +
+    theme_minimal() +
+    theme(legend.position = "top")
+  group_med <- data %>%
+    group_by(time, treatment) %>%
+    summarise(median_score = median(score))
+  group_med <- group_med %>%
+    mutate(effect_of_CON_med = median_score[which(treatment == "ctl_avg")] - median_score[which(treatment == "con_avg")],
+           effect_of_UNCON_med = median_score[which(treatment == "ctl_avg")] - median_score[which(treatment == "unc_avg")])
+  median_plot <- ggplot(group_med, aes(x = time)) +
+    geom_line(aes(y = effect_of_CON_med, color = "Effect of CON", group = 1)) +
+    geom_point(aes(y = effect_of_CON_med, color = "Effect of CON")) +
+    geom_line(aes(y = effect_of_UNCON_med, color = "Effect of UNCON", group = 1)) +
+    geom_point(aes(y = effect_of_UNCON_med, color = "Effect of UNCON")) +
+    geom_hline(yintercept = 0, linetype = "dashed", color = "black") +
+    annotate(geom = "text", x = max(as.numeric(group_med$time)) + 0.2, y = 0, label = "no effect", color = "black", hjust = 0, size = 3) +
+    annotate(geom = "text", x = max(as.numeric(group_med$time)) + 0.2, y = 0.02, label = "weakened", color = "black", hjust = 0, size = 3) +
+    annotate(geom = "text", x = max(as.numeric(group_med$time)) + 0.2, y = -0.02, label = "consolidated", color = "black", hjust = 0, size = 3) +
+    labs(title = "Effect of CON and UNCON over Time(difference in median)",
+         x = "Time",
+         y = "Effect") +
+    scale_color_manual(values = c("Effect of CON" = "red", "Effect of UNCON" = "blue"),
+                       labels = c("Effect of CON", "Effect of UNCON")) +
+    theme_minimal() +
+    theme(legend.position = "top")
+  grid.arrange(mean_plot, median_plot, nrow = 2)} # 두 그래프를 한 화면에 출력
+
+## 한꺼번에 세집단, 두집단씩 비교              
+#비모수
+# Run Kruskal-Wallis test and Wilcoxon test
+kruskal_test_result <- compare_means(score ~ treatment, data = df_avg, group.by = "time", method = "kruskal.test", paired = TRUE)
+wilcoxon_test_result <- compare_means(score ~ treatment, data = df_avg, group.by = "time", paired = TRUE)
+kruskal_test_result
+wilcoxon_test_result
+#모수  
+compare_means(score ~ treatment, data = df_avg, group.by = "time", 
+              method='anova', paired=TRUE)
+compare_means(score ~ treatment, data = df_avg, group.by = "time", 
+              method='t.test', paired=TRUE)    

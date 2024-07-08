@@ -1,0 +1,100 @@
+#데이터 전처리  
+read_and_process_data <- function(file_path, time) {
+  data <- read_excel(file_path)
+  colnames(data)[1] <- "...1"  # 첫 번째 열 이름 변경
+  data <- data.frame(data)
+  data$id <- as.numeric(sub("s(\\d+)_.*", "\\1", data$`...1`))
+  data$time <- time
+  data <- data[!is.na(data$con_avg), ]
+  data <- data[,c("id", "time", "con_avg", "unc_avg", "ctl_avg")]
+  df <- melt(data, id.vars = c("id", "time"), measure.vars = c("con_avg", "unc_avg", "ctl_avg"))
+  df <- df %>%
+    rename(treatment = variable, score = value)
+  df$treatment <- factor(df$treatment, levels = c("con_avg", "unc_avg", "ctl_avg"))
+  return(df)}
+read_and_process_data1 <- function(file_path, time) {
+  data <- read_excel(file_path)
+  colnames(data)[1] <- "...1"  # 첫 번째 열 이름 변경
+  data <- data.frame(data)
+  data$id <- as.numeric(sub("s(\\d+)_.*", "\\1", data$`...1`))
+  data$time <- time
+  data <- data[!is.na(data$pos_unc_avg), ] #
+  data <- data[,c("id", "time", "pos_con_avg", "pos_unc_avg", "pos_ctl_avg")] #
+  df <- melt(data, id.vars = c("id", "time"), measure.vars = c("pos_con_avg", "pos_unc_avg", "pos_ctl_avg")) #
+  df <- df %>%
+    rename(treatment = variable, score = value)
+  df$treatment <- factor(df$treatment, levels = c("pos_con_avg", "pos_unc_avg", "pos_ctl_avg")) #
+  return(df)}
+read_and_process_data2 <- function(file_path, time) {
+  data <- read_excel(file_path)
+  colnames(data)[1] <- "...1"  # 첫 번째 열 이름 변경
+  data <- data.frame(data)
+  data$id <- as.numeric(sub("s(\\d+)_.*", "\\1", data$`...1`))
+  data$time <- time
+  data <- data[!is.na(data$neg_unc_avg), ] #
+  data <- data[!is.na(data$neg_con_avg), ] #
+  data <- data[!is.na(data$neg_ctl_avg), ] #
+  data <- data[,c("id", "time", "neg_con_avg", "neg_unc_avg", "neg_ctl_avg")] #
+  df <- melt(data, id.vars = c("id", "time"), measure.vars = c("neg_con_avg", "neg_unc_avg", "neg_ctl_avg")) #
+  df <- df %>%
+    rename(treatment = variable, score = value)
+  df$treatment <- factor(df$treatment, levels = c("neg_con_avg", "neg_unc_avg", "neg_ctl_avg")) #
+  return(df)}
+
+#0.데이터 요약 함수 #
+summary <- function(df) {
+  # 요약 통계량 계산
+  summary_stats <- df %>%
+    group_by(treatment) %>%
+    summarize(
+      median_score = median(score, na.rm = TRUE),mean_score = mean(score, na.rm = TRUE),
+      sd_score = sd(score, na.rm = TRUE),
+      min_score = min(score, na.rm = TRUE),max_score = max(score, na.rm = TRUE),
+      q1_score = quantile(score, probs = 0.25, na.rm = TRUE), q3_score = quantile(score, probs = 0.75, na.rm = TRUE))
+  print(summary_stats)
+  # Shapiro-Wilk 정규성 검정 결과 출력
+  shapiro_results <- df %>%
+    group_by(treatment) %>%
+    summarise(p_value = shapiro.test(score)$p.value)
+  print(shapiro_results)
+  # 등분산성 검정 (Levene's Test)
+  levene_result <- car::leveneTest(score ~ treatment, data = df)
+  print(levene_result)
+  # outlier check
+  outliers <- df %>%
+    group_by(treatment) %>%
+    rstatix::identify_outliers(score)
+  print(outliers)
+  # Q-Q Plot 그리기
+  qqplot <- ggqqplot(df, "score", ggtheme = theme_bw()) +
+    facet_grid(~treatment, labeller = "label_both") +
+    labs(title = "Q-Q Plot of Score by Treatment",
+         x = "Theoretical Quantiles", y = "Sample Quantiles") +
+    theme_minimal()
+  # 그룹별 히스토그램 그리기
+  histograms <- ggplot(df, aes(x = score, fill = treatment)) +
+    geom_histogram(binwidth = 0.1, position = "dodge") +
+    facet_grid(~treatment, scales = "free_y") +
+    labs(title = "Histograms of Score by Treatment",
+         x = "Score", y = "Frequency") +
+    theme_minimal()
+  # Q-Q Plot과 히스토그램을 한 페이지에 출력
+  grid.arrange(qqplot, histograms, ncol = 2)}
+
+
+df56_all <- read_and_process_data("C:/Users/kkhyu/OneDrive/바탕 화면/meteor_56/4일차/조건별/ai_stand, 4일차 조건별.xlsx", "4day")
+df56_p <- read_and_process_data1("C:/Users/kkhyu/OneDrive/바탕 화면/meteor_56/4일차/긍부정조건별/ai_stand, 4일차 긍부정조건별.xlsx", "4day")
+df56_n <- read_and_process_data2("C:/Users/kkhyu/OneDrive/바탕 화면/meteor_56/4일차/긍부정조건별/ai_stand, 4일차 긍부정조건별.xlsx", "4day")
+df56 <- rbind(df56_all, df56_p, df56_n)
+df56
+
+summary(df56)
+pairwise.wilcox.test(df63$score, df63$treatment, p.adjust.method='bonferroni')    
+compare_means(score ~ treatment, data = df63, method = "kruskal.test")
+print(compare_means(score ~ treatment, data = df56, method="wilcox.test", paired = TRUE, alternative="two.sided"), n = Inf)
+print(compare_means(score ~ treatment, data = df56, method="wilcox.test", paired = TRUE, alternative="less"), n = Inf)
+print(compare_means(score ~ treatment, data = df56, method="wilcox.test", paired = TRUE, alternative="greater"), n = Inf)
+
+print(compare_means(score ~ treatment, data = df56, method="t.test", paired = TRUE, alternative="two.sided"), n = Inf)
+print(compare_means(score ~ treatment, data = df56, method="t.test", paired = TRUE, alternative="less"), n = Inf)
+print(compare_means(score ~ treatment, data = df56, method="t.test", paired = TRUE, alternative="greater"), n = Inf)
