@@ -1,0 +1,67 @@
+<!--
+  Congratulations! Your project has been converted to JavaScript!
+
+  You should see a working preview of your project on the right side of
+  the screen. If not, it means something went wrong.
+
+  Your project's code is all stored in the files on the left side of the
+  screen. You can edit the JavaScript code and your project will change.
+  But you have to save your changes using File > Save or Ctrl+S on your
+  keyboard before the project preview will update.
+-->
+
+<!DOCTYPE html>
+<html>
+  <head>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leopard@^1/dist/index.min.css"/>
+    <link rel="stylesheet" href="index.css"/>
+    <script src="https://unpkg.com/read-excel-file@4.x/bundle/read-excel-file.min.js"></script>
+  </head>
+  <body>
+    <div class="place">
+      <div class="flex-container">
+
+      </div>
+    <div id="project" style="margin-bottom:2%;"></div>
+    </div>
+
+
+    <script type="module">
+      import project from "./index.js";
+
+      project.attach("#project");
+
+      document.querySelector("#greenFlag").addEventListener("click", () => {
+        project.greenFlag();
+      });
+
+      // Autoplay
+      
+    </script>
+<!--    <input type="file" id="input">
+    <table id="tbl-data"></table>
+    <script>
+      var input = document.getElementById('input');
+      input.addEventListener('change', function() {
+          readXlsxFile(input.files[0]).then(function(data) {
+              console.log(data);    
+          });
+      });
+    </script> -->
+    <!-- input 요소를 추가합니다. -->
+    <label for="myInput" style="margin-left:25%;">Subject Code:</label>
+    <input type="text" id="myInput">
+    <button onclick="useInputValue()" id="greenFlag" type="button">Enter</button>
+
+    <script>
+        // 이 부분에 input 값을 저장하는 함수를 정의할 수도 있습니다.
+        function useInputValue() {
+            var inputValue = document.getElementById("myInput").value;
+            // MyApple.js 파일에서 사용할 수 있도록 전역 변수로 저장합니다.
+            window.myInputValue = inputValue;
+        }
+    </script>
+  </body>
+</html>
