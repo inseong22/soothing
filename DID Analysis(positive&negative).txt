@@ -1,0 +1,194 @@
+```{r}
+## 긍부정 시간에 따른 분석 ##
+
+#life feedback 불러오기기
+      df0<- read_excel("C:/Users/yoonj/OneDrive - 연세대학교 (Yonsei University)/바탕 화면/DID 분석/life_feedback.xlsx")
+      selected_df0 <- df0[df0$id %in% df3$id, c("id", "life", "feedback")]
+
+# 데이터 불러오기 및 전처리
+      read_and_process_data <- function(file_path, time) {
+      data <- read_excel(file_path)
+      colnames(data)[1] <- "...1"  # 첫 번째 열 이름 변경
+      data <- data.frame(data)
+      data$id <- as.numeric(sub("s(\\d+)_.*", "\\1", data$`...1`))
+      data$time <- time
+      data <- data[!is.na(data$pos_unc_avg), ]
+      data <- data[!is.na(data$pos_con_avg), ]  #결측값이 하나라도 있음 제거 
+      data <- data[!is.na(data$pos_ctl_avg), ]
+      return(data)}
+    # 각 날짜별 데이터 불러오기
+    df1 <- read_and_process_data("C:\\Users\\yoonj\\OneDrive - 연세대학교 (Yonsei University)\\바탕 화면\\DID 분석\\mean 전처리 (DID용, 반복횟수대푯값추가됨)\\mean, raw점수\\1일차\\긍부정조건별\\mean, raw점수, 1일차, ai, 긍부정조건별.xlsx", "1day")
+    df2 <- read_and_process_data("C:\\Users\\yoonj\\OneDrive - 연세대학교 (Yonsei University)\\바탕 화면\\DID 분석\\mean 전처리 (DID용, 반복횟수대푯값추가됨)\\mean, raw점수\\2일차\\긍부정조건별\\mean, raw점수, 2일차, ai, 긍부정조건별.xlsx", "2day")
+    df3 <- read_and_process_data("C:\\Users\\yoonj\\OneDrive - 연세대학교 (Yonsei University)\\바탕 화면\\DID 분석\\mean 전처리 (DID용, 반복횟수대푯값추가됨)\\mean, raw점수\\4일차\\긍부정조건별\\mean, raw점수, 4일차, ai, 긍부정조건별.xlsx", "4day")
+    
+    #긍정
+    # 데이터 스택으로 합치기
+    # df3에 있는 id와 일치하는 df1, df2의 행들을 선택하여 병합
+    common_ids <- intersect(intersect(df1$id, df2$id), df3$id)
+    common_ids
+    selected_df1 <- df1[df1$id %in% common_ids, c("id", "time", "pos_con_avg", "pos_unc_avg", "pos_ctl_avg")]
+    selected_df2 <- df2[df2$id %in% common_ids, c("id", "time", "pos_con_avg", "pos_unc_avg", "pos_ctl_avg")]
+    selected_df3 <- df3[df3$id %in% common_ids, c("id", "time", "pos_con_avg", "pos_unc_avg", "pos_ctl_avg")]
+    # df1, df2, df3의 선택된 행들을 병합
+    df_avg <- rbind(selected_df1, selected_df2, selected_df3)
+    # ctl_avg와 unc_avg의 순서 변경
+    df_avg <- melt(df_avg, id.vars = c("id", "time"), measure.vars = c("pos_con_avg", "pos_unc_avg", "pos_ctl_avg"))
+    df_avg <- df_avg %>%
+      rename(treatment = variable, score = value)
+    df_avg$treatment <- factor(df_avg$treatment, levels = c("pos_con_avg", "pos_unc_avg", "pos_ctl_avg"))
+    df_avg <- df_avg %>% 
+  left_join(selected_df0, by = "id")
+
+    
+    
+    
+    
+    
+    ###################################################################
+    ####반복횟수 추가하기
+          
+    #1일차, 2일차, 4일차 반복횟수 받기
+    df_1_r<-read_and_process_data("C:\\Users\\yoonj\\OneDrive - 연세대학교 (Yonsei University)\\바탕 화면\\DID 분석\\mean 전처리 (DID용, 반복횟수대푯값추가됨)\\mean, raw점수\\1일차\\긍부정조건별\\mean, raw점수, 1일차, 긍부정조건별, 반복횟수대푯값.xlsx","1day")
+    df_2_r<-read_and_process_data("C:\\Users\\yoonj\\OneDrive - 연세대학교 (Yonsei University)\\바탕 화면\\DID 분석\\mean 전처리 (DID용, 반복횟수대푯값추가됨)\\mean, raw점수\\2일차\\긍부정조건별\\mean, raw점수, 2일차, 긍부정조건별, 반복횟수대푯값.xlsx","2day")
+    df_3_r<-read_and_process_data("C:\\Users\\yoonj\\OneDrive - 연세대학교 (Yonsei University)\\바탕 화면\\DID 분석\\mean 전처리 (DID용, 반복횟수대푯값추가됨)\\mean, raw점수\\4일차\\긍부정조건별\\mean, raw점수, 4일차, 긍부정조건별, 반복횟수대푯값.xlsx","4day")
+    df_r <- rbind(df_1_r,df_2_r,df_3_r) #세 데이터프레임 합치기
+    df_r <- df_r %>%
+            rename(con_avg_r=pos_con_avg, unc_avg_r=pos_unc_avg,ctl_avg_r=pos_ctl_avg) #반복횟수 열 이름 변경 
+    
+    
+    #df_avg에 반복횟수 데이터베이스 합쳐서 rep라는 열에 저장하기
+    df_avg <- df_avg %>%
+    left_join(df_r, by = c("id", "time")) %>% 
+    mutate(rep = case_when(
+      treatment == "pos_con_avg" ~ con_avg_r,
+      treatment == "pos_unc_avg" ~ unc_avg_r,
+      treatment == "pos_ctl_avg" ~ ctl_avg_r
+    )) %>%
+      
+    #df_avg에서 필요한 열만 선택택
+    select(id, time, treatment, rep, life, score, feedback)
+    ###################################################################      
+summary(df_avg) #요약통계
+
+##################################################################      
+#DID 분석(긍정)
+      
+df_avg <- df_avg %>%
+  mutate(first.treat = ifelse(treatment == 'pos_ctl_avg', 0, 1))
+df_avg <- df_avg %>%
+  mutate(treat = ifelse(treatment == 'pos_ctl_avg', 0, 1))
+
+# 'treatment' 열의 값이 'ctl_avg' 또는 'con_avg'인 행들만 필터링하여 df_con에 저장
+df_con_2 <- df_avg %>%
+  filter(treatment == 'pos_ctl_avg' | treatment == 'pos_con_avg') %>%
+  filter(time == '1day' | time == '2day')
+df_con_2 <- df_con_2 %>%
+  mutate(time01 = ifelse(time == '1day', 0, 1))
+
+df_con_4 <- df_avg %>%
+  filter(treatment == 'pos_ctl_avg' | treatment == 'pos_con_avg') %>%
+  filter(time == '1day' | time == '4day')
+df_con_4 <- df_con_4 %>%
+  mutate(time01 = ifelse(time == '1day', 0, 1))
+
+df_unc_2 <- df_avg %>%
+  filter(treatment == 'pos_ctl_avg' | treatment == 'pos_unc_avg') %>%
+  filter(time == '1day' | time == '2day')
+df_unc_2 <- df_unc_2 %>%
+  mutate(time01 = ifelse(time == '1day', 0, 1))
+
+
+df_unc_4 <- df_avg %>%
+  filter(treatment == 'pos_ctl_avg' | treatment == 'pos_unc_avg') %>%
+  filter(time == '1day' | time == '4day')
+df_unc_4 <- df_unc_4 %>%
+  mutate(time01 = ifelse(time == '1day', 0, 1))
+
+summary(lm(score ~ treat*time01+life+feedback+rep, data = df_con_2))
+summary(lm(score ~ treat*time01+life+feedback+rep, data = df_con_4))
+summary(lm(score ~treat*time01+life+feedback+rep, data = df_unc_2))
+summary(lm(score ~ treat*time01+life+feedback+rep, data = df_unc_4))
+
+
+    #부정
+    # 데이터 스택으로 합치기
+    # df3에 있는 id와 일치하는 df1, df2의 행들을 선택하여 병합
+    common_ids <- intersect(intersect(df1$id, df2$id), df3$id)
+    common_ids
+    selected_df1 <- df1[df1$id %in% common_ids, c("id", "time", "neg_con_avg", "neg_unc_avg", "neg_ctl_avg")]
+    selected_df2 <- df2[df2$id %in% common_ids, c("id", "time", "neg_con_avg", "neg_unc_avg", "neg_ctl_avg")]
+    selected_df3 <- df3[df3$id %in% common_ids, c("id", "time", "neg_con_avg", "neg_unc_avg", "neg_ctl_avg")]
+    # df1, df2, df3의 선택된 행들을 병합
+    df_avg <- rbind(selected_df1, selected_df2, selected_df3)
+    # ctl_avg와 unc_avg의 순서 변경
+    df_avg <- melt(df_avg, id.vars = c("id", "time"), measure.vars = c("neg_con_avg", "neg_unc_avg", "neg_ctl_avg"))
+    df_avg <- df_avg %>%
+      rename(treatment = variable, score = value)
+    df_avg$treatment <- factor(df_avg$treatment, levels = c("neg_con_avg", "neg_unc_avg", "neg_ctl_avg"))
+    df_avg <- df_avg %>% 
+  left_join(selected_df0, by = "id")
+
+###################################################################      
+summary(df_avg) #요약통계
+
+    
+    
+    #1일차, 2일차, 4일차 반복횟수 받기
+    df_1_r<-read_and_process_data("C:\\Users\\yoonj\\OneDrive - 연세대학교 (Yonsei University)\\바탕 화면\\DID 분석\\mean 전처리 (DID용, 반복횟수대푯값추가됨)\\mean, raw점수\\1일차\\긍부정조건별\\mean, raw점수, 1일차, 긍부정조건별, 반복횟수대푯값.xlsx","1day")
+    df_2_r<-read_and_process_data("C:\\Users\\yoonj\\OneDrive - 연세대학교 (Yonsei University)\\바탕 화면\\DID 분석\\mean 전처리 (DID용, 반복횟수대푯값추가됨)\\mean, raw점수\\2일차\\긍부정조건별\\mean, raw점수, 2일차, 긍부정조건별, 반복횟수대푯값.xlsx","2day")
+    df_3_r<-read_and_process_data("C:\\Users\\yoonj\\OneDrive - 연세대학교 (Yonsei University)\\바탕 화면\\DID 분석\\mean 전처리 (DID용, 반복횟수대푯값추가됨)\\mean, raw점수\\4일차\\긍부정조건별\\mean, raw점수, 4일차, 긍부정조건별, 반복횟수대푯값.xlsx","4day")
+    df_r <- rbind(df_1_r,df_2_r,df_3_r) #세 데이터프레임 합치기
+    df_r <- df_r %>%
+            rename(con_avg_r=neg_con_avg, unc_avg_r=neg_unc_avg,ctl_avg_r=neg_ctl_avg) #반복횟수 열 이름 변경 
+    
+    
+    #df_avg에 반복횟수 데이터베이스 합쳐서 rep라는 열에 저장하기
+    df_avg <- df_avg %>%
+    left_join(df_r, by = c("id", "time")) %>% 
+    mutate(rep = case_when(
+      treatment == "neg_con_avg" ~ con_avg_r,
+      treatment == "neg_unc_avg" ~ unc_avg_r,
+      treatment == "neg_ctl_avg" ~ ctl_avg_r
+    )) %>%
+      
+    #df_avg에서 필요한 열만 선택택
+    select(id, time, treatment, rep, life, score, feedback)
+    
+##################################################################      
+#DID 분석
+      
+df_avg <- df_avg %>%
+  mutate(first.treat = ifelse(treatment == 'neg_ctl_avg', 0, 1))
+df_avg <- df_avg %>%
+  mutate(treat = ifelse(treatment == 'neg_ctl_avg', 0, 1))
+
+# 'treatment' 열의 값이 'ctl_avg' 또는 'con_avg'인 행들만 필터링하여 df_con에 저장
+df_con_2 <- df_avg %>%
+  filter(treatment == 'neg_ctl_avg' | treatment == 'neg_con_avg') %>%
+  filter(time == '1day' | time == '2day')
+df_con_2 <- df_con_2 %>%
+  mutate(time01 = ifelse(time == '1day', 0, 1))
+
+df_con_4 <- df_avg %>%
+  filter(treatment == 'neg_ctl_avg' | treatment == 'neg_con_avg') %>%
+  filter(time == '1day' | time == '4day')
+df_con_4 <- df_con_4 %>%
+  mutate(time01 = ifelse(time == '1day', 0, 1))
+
+df_unc_2 <- df_avg %>%
+  filter(treatment == 'neg_ctl_avg' | treatment == 'neg_unc_avg') %>%
+  filter(time == '1day' | time == '2day')
+df_unc_2 <- df_unc_2 %>%
+  mutate(time01 = ifelse(time == '1day', 0, 1))
+
+
+df_unc_4 <- df_avg %>%
+  filter(treatment == 'neg_ctl_avg' | treatment == 'neg_unc_avg') %>%
+  filter(time == '1day' | time == '4day')
+df_unc_4 <- df_unc_4 %>%
+  mutate(time01 = ifelse(time == '1day', 0, 1))
+
+summary(lm(score ~ treat*time01+life+feedback+rep, data = df_con_2))
+summary(lm(score ~ treat*time01+life+feedback+rep, data = df_con_4))
+summary(lm(score ~treat*time01+life+feedback+rep, data = df_unc_2))
+summary(lm(score ~ treat*time01+life+feedback+rep, data = df_unc_4))
